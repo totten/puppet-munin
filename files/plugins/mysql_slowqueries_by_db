@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+# Plugin to monitor the hits per virtual domains
+#
+# Parameters:
+#
+#       config
+#       autoconf
+#
+#
+#%# family=contrib
+#%# capabilities=autoconf
+
+#if [ "$1" = "autoconf" ]; then
+#       if [ -f $CACHEFILE ]; then
+#               echo yes
+#               exit 0
+#       else
+#               echo "no (could not find cache file)"
+#       fi
+#        exit 1
+#fi
+
+LOGFILE=${logfile:-/var/log/mysql/mysql-slow.log}
+OFFSET_FILE=/var/lib/munin/plugin-state/mysql_slow_query_by_db_${SERVICE}.offset
+LOGTAIL=${logtail:-/usr/sbin/logtail}
+
+if [ "$1" = "config" ]; then
+        echo 'graph_title Slow queries by database'
+        echo 'graph_vlabel quantity'
+        echo 'graph_category Mysql'
+        # echo 'graph_scale no'
+        # echo 'graph_args --base 1024 -l 0'
+
+        # not using logtail here to avoid screwing up the results below
+	tail -5000 $LOGFILE | grep User@Host | sort | uniq -c | head -10 | sed 's/\[.*\]//' | awk '{print $4".label " $4}'
+        exit 0
+fi
+
+${LOGTAIL} ${LOGFILE} ${OFFSET_FILE}  | grep User@Host | sort | uniq -c | head -10 | sed 's/\[.*\]//' | awk '{print $4".value " $1}'

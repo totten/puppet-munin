@@ -1,0 +1,55 @@
+#!/bin/sh
+#
+# Plugin to monitor the number of active connections to the mysql server
+#
+# Parameters:
+# 	
+# 	config
+# 	autoconf
+#
+# Configuration variables
+#
+#	mysqlopts    - Options to pass to mysql which should include the
+#  			username, password, host and alternc database.
+#
+# Example of the entry in plugin-conf.d/munin-node
+#	[alternc*]
+#	user root
+#	env.mysqlopts --defaults-file=/etc/mysql/alternc.cnf
+#
+#
+#%# family=auto
+#%# capabilities=autoconf
+
+MYSQLOPTS="$mysqlopts"
+MYSQL=${mysql:-mysql}
+
+if [ "$1" = "autoconf" ]; then
+        $MYSQL --version 2>/dev/null >/dev/null
+        if [ $? -eq 0 ]
+        then
+                $MYSQL $MYSQLOPTS -N -B -e 'show tables' 2>/dev/null >/dev/null
+                if [ $? -eq 0 ]
+                then
+                        echo yes
+                        exit 0
+                else
+                        echo "no (could not connect to mysql)"
+                fi
+        else
+                echo "no (mysql client not found)"
+        fi
+        exit 1
+fi
+
+if [ "$1" = "config" ]; then
+	echo 'graph_title Apache - mysql connections by user'
+	echo 'graph_vlabel quantity'
+	echo 'graph_category alternc'
+        mysql --defaults-file=/etc/mysql/alternc.cnf -N -B -e "SHOW PROCESSLIST" | awk ' {foo[$2]++} END {for (f in foo) { print f".label" , f }}'
+	exit 0
+fi
+
+# $MYSQL $MYSQLOPTS -N -B -e "SHOW PROCESSLIST" | awk ' {foo[$2]++} END {for (f in foo) { print f".value" , foo[f] }}'
+mysql --defaults-file=/etc/mysql/alternc.cnf -N -B -e "SHOW PROCESSLIST" | awk ' {foo[$2]++} END {for (f in foo) { print f".value" , foo[f] }}'
+
