@@ -46,10 +46,8 @@ if [ "$1" = "config" ]; then
 	echo 'graph_title Apache - mysql connections by user'
 	echo 'graph_vlabel quantity'
 	echo 'graph_category alternc'
-        mysql --defaults-file=/etc/mysql/alternc.cnf -N -B -e "SHOW PROCESSLIST" | awk ' {foo[$2]++} END {for (f in foo) { print f".label" , f }}'
+        $MYSQL $MYSQLOPTS -N -B -e "SHOW PROCESSLIST" | awk ' {foo[$2]++} END {for (f in foo) { print f".label" , f }}'
 	exit 0
 fi
 
-# $MYSQL $MYSQLOPTS -N -B -e "SHOW PROCESSLIST" | awk ' {foo[$2]++} END {for (f in foo) { print f".value" , foo[f] }}'
-mysql --defaults-file=/etc/mysql/alternc.cnf -N -B -e "SHOW PROCESSLIST" | awk ' {foo[$2]++} END {for (f in foo) { print f".value" , foo[f] }}'
-
+$MYSQL $MYSQLOPTS -N -B -e "SHOW PROCESSLIST" | awk ' {foo[$2]++} END {for (f in foo) { print f".value" , foo[f] }}'
