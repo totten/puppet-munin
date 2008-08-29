@@ -61,6 +61,7 @@ define munin::remoteplugin($ensure = "present", $source, $config = '') {
 				ensure => $ensure,
 				config => $config,
 				script_path => "/var/lib/puppet/modules/munin/plugins",
+				require => File["/var/lib/puppet/modules/munin/plugins/${name}"],
 			}
 		}
 	}
