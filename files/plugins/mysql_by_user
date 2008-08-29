@@ -43,9 +43,9 @@ if [ "$1" = "autoconf" ]; then
 fi
 
 if [ "$1" = "config" ]; then
-	echo 'graph_title Apache - mysql connections by user'
+	echo 'graph_title Mysql connections by user'
 	echo 'graph_vlabel quantity'
-	echo 'graph_category alternc'
+	echo 'graph_category Mysql'
         $MYSQL $MYSQLOPTS -N -B -e "SHOW PROCESSLIST" | awk ' {foo[$2]++} END {for (f in foo) { print f".label" , f }}'
 	exit 0
 fi
