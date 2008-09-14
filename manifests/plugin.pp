@@ -54,6 +54,7 @@ define munin::remoteplugin($ensure = "present", $source, $config = '') {
 		default: {
 			file {
 				"/var/lib/puppet/modules/munin/plugins/${name}":
+				        notify => Service["munin-node"],
 					source => $source,
 					mode => 0755, owner => root, group => root;
 			}
@@ -81,6 +82,9 @@ class munin::plugins::base {
 			mode => 0644, owner => root, group => root,
 			notify => Service[munin-node],
 			before => Package[munin-node];
+		"/var/lib/munin/plugin-state":
+			ensure => directory,
+			mode => 0755, owner => root, group => root;
 	}
 
 }
