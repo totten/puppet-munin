@@ -1,0 +1,201 @@
+#!/usr/bin/perl
+# -*- perl -*-
+#
+# Plugin to graph http performance
+#
+# The purpose of this plugin is to monitor the load time of a web page.
+# 
+# This is a rewrite of the http_load plugin from:
+#
+# Author:  Espen Braastad / Linpro AS
+#          espen@linpro.no
+#
+# Severly trimmed down by:
+#
+# Author: The Anarcat / Koumbit anarcat@koumbit.org
+#
+##### Short usage guide: #####
+#
+# Requirements:
+#  * The server running this plugin must be allowed  to connect to the web 
+#    server(s) you are going to monitor.
+#  * Some perl modules: 
+#    Time::HiRes, LWP::UserAgent, LWP::ConnCache
+#
+# Initial configuration:
+#  1. Copy this file to /usr/share/munin/plugins/
+#
+#  2. Create a file (/etc/munin/http_load_urls.txt) with one
+#     full url per line, as many as you want, i.e.:
+#      $ echo "http://www.dn.no/" >> /etc/munin/urls.txt
+#      $ echo "http://www.intrafish.no/" >> /etc/munin/urls.txt
+#
+#  4. Run munin-node-configure --suggest --shell and run the symlink
+#     commands manually to update the munin-node plugin list.
+#     tags to follow in a web page, edit the subroutine called "filter" below.)
+#
+# Add a new url to monitor:
+#  1. Add a new line in /etc/munin/urls.txt with the full URL, i.e.:
+#      $ echo "http://www.linpro.no/" >> /etc/munin/http_load_urls.txt
+#
+# Remove a url from monitoring:
+#  1. Remove it from /etc/munin/http_load_urls.txt
+#
+# Magic markers:
+#%# family=auto
+#%# capabilities=autoconf suggest
+
+use strict;
+use Time::HiRes qw( gettimeofday tv_interval );
+use LWP::UserAgent;
+
+my $url_file="/etc/munin/http_load_urls.txt";
+my $cachedir="/var/lib/munin/plugin-state";
+
+my $version="1.0";
+my $debug=0;
+my $timeout=10;
+my $max_redirects=10;
+my $category="network"; # The munin graph category
+my $useragent="MuninPerf/$version";
+my $proxy="http://localhost/";
+
+# Function to read the $url_file and return the contents in a hash
+sub read_urls{
+	my $file=$_[0];
+	my %urls=();
+	if(-r $file){
+		open(FILE,'<'.$file);
+		while (<FILE>) { 
+			my $url=$_;
+			chomp($url);
+			my $id=get_id($url);
+			if(length($id)>0){
+				$urls{$id}=$url;
+			}
+		}
+		close (FILE);
+	}
+	return %urls;
+}
+
+# Get fieldname (making sure it is munin "compatible" as a fieldname)
+# 1. Remove all non-word characters from a string)
+# 2. Make sure it has maximum 19 characters
+sub get_fieldname{
+	my $url=$_[0];
+	$url =~ s/\W//g;
+	if(length($url) > 19){
+		$url =  substr($url, 0, 19);
+	}
+	return $url;
+}
+
+# Same as get_fieldname except it doesn't substr
+sub get_id{
+	my $url=$_[0];
+	$url =~ s/\W//g;
+	return $url;
+}
+
+my $exit = 0;
+if($ARGV[0] and $ARGV[0] eq "autoconf") {
+	my %urls=&read_urls($url_file);
+	if(keys(%urls) gt 0){
+		print "yes\n";
+	} else {
+		print "no\n";
+		$exit = 1;
+	}
+
+} elsif($ARGV[0] and $ARGV[0] eq "suggest") {
+	# get the url list, print suggestions for usage
+	my %urls=&read_urls($url_file);
+	if(keys(%urls) gt 0){
+        	print $0 . "\n";
+    	}
+
+}elsif($ARGV[0] and $ARGV[0] eq "config") {
+	my %urls=&read_urls($url_file);
+	
+        print "graph_title HTTP performance\n";
+        print "graph_args -l 0 --base 1000\n";
+        print "graph_category " . $category . "\n";
+
+	my %urls=&read_urls($url_file);
+
+	my $count=0;
+	$debug && print "The url file contains " . keys(%urls) . " lines\n";
+
+	{
+                print "graph_vlabel Seconds\n";
+		print "graph_total Total\n";
+         	print "graph_info The load time in seconds of various URLs";
+		$proxy && print " through the \"proxy\" $proxy";
+		print ". Note that HTML elements (images, links, embeded elements) are not loaded or rendered, so the timing will differ from a real browser.\n";
+		
+		if(keys(%urls)>0){
+			for my $key ( sort keys %urls){
+				my $value=$urls{$key};
+				my $name=$key;
+	
+        	        	print "$name.label $value\n";
+        	        	print "$name.min 0\n";
+			}
+		}
+	}
+} else {
+	my $verbose=0;
+	if($ARGV[0] and $ARGV[0] eq "verbose") {
+		$verbose=1;
+		print "Verbose output\n";
+	}
+
+	my %urls=&read_urls($url_file);
+	my %res;
+	my ($t0,$t1);
+	my ($request,$response,$status,$link,$contents,$page_parser,$cachefile);
+
+	while ( my ($id, $url) = each(%urls) ) {
+        	$verbose && print "Fetching $url (id: $id)... \n";
+		
+		$t0=0;
+		$status=0;
+		my $host="";
+		if($url =~ m/\w+\:\/\/([^\/]+).*/){
+			$host=$1;
+        		$verbose && print " Host: $host\n";
+		}
+
+		my $browser = LWP::UserAgent->new(agent => $useragent,
+		                                  timeout => $timeout,
+						  max_redirect => $max_redirects,
+						  parse_head => 0);
+
+		if ($proxy) {
+			$verbose && print " Proxy: $proxy\n";
+			$browser->proxy(['http'], $proxy);
+		}
+
+		my $loadtime;
+		# Calculating time from now:
+		$t0 = [gettimeofday];
+		$response = $browser->get($url);
+
+	        if ($response->is_success()) {
+        		$contents = $response->content();
+			$t1 = [gettimeofday];
+			$verbose && printf("timestamps: %.6f => %.6f\n", $t0, $t1);
+	        	$loadtime = sprintf("%.6f",tv_interval ( $t0, $t1 ));
+		} else {
+			$loadtime = "NaN";
+		}
+
+		print $id . ".value " . $loadtime . "\n";
+
+		$verbose && print "done\n";
+	}
+} 
+
+exit($exit);
+# vim:syntax=perl
