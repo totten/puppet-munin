@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# Plugin to monitor network connections by IP (most active)
+#
+# Parameters:
+#
+# 	config   (required)
+# 	autoconf (optional - only used by munin-config)
+#
+#
+#
+#
+# Magic markers (optional - used by munin-config and some installation
+# scripts):
+#%# family=auto
+#%# capabilities=autoconf
+
+
+
+if [ "$1" = "autoconf" ]; then
+	if ( netstat -s 2>/dev/null >/dev/null ); then
+		echo yes
+		exit 0
+	else
+		if [ $? -eq 127 ]
+		then
+			echo "no (netstat program not found)"
+			exit 1
+		else
+			echo no
+			exit 1
+		fi
+	fi
+fi
+
+if [ "$1" = "config" ]; then
+
+	echo 'graph_title Netstat by top IP'
+	echo 'graph_vlabel active connections'
+	echo 'graph_category network'
+	# echo 'graph_period second'
+	echo 'graph_info This graph shows the TCP activity of all the network interfaces combined (by most active IP).'
+
+	netstat -n | grep tcp | awk '{print $5}' | grep -v ffff | cut -f 1 -d ":" | awk '{foo[$1]++} END {for (f in foo) { print foo[f], f }}'  | sort -n  | grep -v "^[123456789] " | sed "s/\./_/g" |  awk '{print $2".label "$2}'
+
+	exit 0
+fi
+
+netstat -n | grep tcp | awk '{print $5}' | grep -v ffff | cut -f 1 -d ":" | awk '{foo[$1]++} END {for (f in foo) { print foo[f], f }}'  | sort -n  | grep -v "^[123456789] " | sed "s/\./_/g" | awk '{print $2".value "$1}'
+
+
