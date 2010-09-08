@@ -22,7 +22,7 @@ class munin::client {
 			include munin::client::debian
 			include munin::plugins::debian
 		}
-		default: { fail ("Don't know how to handle munin on $operatingsystem") }
+		default: { notice ("Don't know how to handle munin on $operatingsystem") }
 	}
 
 	case $kernel {
