@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# Plugin to monitor the hits per virtual domains
+#
+# KNOWN ISSUES:
+# - it's hard to have "labels" that match the "values" when the most active
+#   sites sample is not very stable. Munin might complain that labels are
+#   missing for a given value, because the label was not in the logs when
+#   the config was called
+#
+# Parameters:
+# 	
+# 	config
+# 	autoconf
+#
+#
+#%# family=contrib
+#%# capabilities=autoconf
+
+#if [ "$1" = "autoconf" ]; then
+#	if [ -f $CACHEFILE ]; then
+#		echo yes
+#		exit 0
+#	else
+#		echo "no (could not find cache file)"
+#	fi
+#        exit 1
+#fi
+
+
+LOGFILE=${logfile:-/var/log/apache2/access.log}
+OFFSET_FILE_LABELS=/var/lib/munin/plugin-state/apache_hits_per_domain_${SERVICE}_labels.offset
+OFFSET_FILE_VALUES=/var/lib/munin/plugin-state/apache_hits_per_domain_${SERVICE}_values.offset
+LOGTAIL=${logtail:-/usr/sbin/logtail}
+
+# [ML] 2009-03-31 : Filtering out 209.44.112.65, the load balancer (does regular pings)
+IGNORE_IP="209.44.112.65"
+
+if [ "$1" = "config" ]; then
+	echo 'graph_title Most active sites'
+	echo 'graph_vlabel quantity'
+	echo 'graph_category Apache'
+	# echo 'graph_scale no'
+	# echo 'graph_args --base 1024 -l 0'
+
+	# taking a larger sample of labels, just in case
+        ${LOGTAIL} ${LOGFILE} ${OFFSET_FILE_LABELS} | grep -v $IGNORE_IP | /root/bin/hits_per_domain  | tail -10 | awk '{gsub(/[-\.]/,"_",$2); print $2".label "$2}'
+	exit 0
+fi
+
+${LOGTAIL} ${LOGFILE} ${OFFSET_FILE_VALUES} | grep -v $IGNORE_IP | awk '{print $NF}' | sort | uniq -c | sort -n  | tail -10 | sed 's/[-\.]/_/g' | awk '{print $2".value " $1}'
