@@ -1,8 +1,8 @@
-#!/bin/sh
-#
+#!/usr/bin/perl
+
 # Plugin to monitor the number of opened tickets in RT.
 #
-# Usage: copy or link into /etc/munin/node.d/
+# Usage: copy or link into /etc/munin/plugins/
 #
 # Parameters:
 #
@@ -21,31 +21,75 @@
 #%# family=contrib
 #%# capabilities=autoconf
 
-PGSQL="/usr/local/bin/psql --tuples-only "
-PGDB="rt3"
-NOBODYID=10
+use DBI;
+use strict;
 
-if [ "$1" = "autoconf" ]; then
-	echo yes
-	exit 0
-fi
+##
+## Fetch configuration variables from the RT 3.8 config files
+##
 
-if [ "$1" = "config" ]; then
-	echo 'graph_title RT open tickets'
-	echo 'graph_vlabel quantity'
-	echo 'graph_category rt'
-	echo 'graph_scale no'
+my %confs = ();
 
-	echo 'assigned.label Assigned'
-	echo 'assigned.draw AREA'
-	echo 'unassigned.label Unassigned'
-	echo 'unassigned.draw STACK'
+our $DatabaseUser = 'user';
+our $DatabasePassword = 'password';
+our $DatabaseName = 'db';
+our $DatabaseRTHost = 'host';
 
-	exit 0
-fi
+sub Set {
+  my $var = shift;
+  my $value = shift;
 
-echo -n 'assigned.value '
-$PGSQL -c "select count(*) from tickets t WHERE ( t.status = 'new' OR t.status = 'open' ) and t.owner != '$NOBODYID';" $PGDB |  awk '{print $1}' | sed '/^$/d'
+  $confs{$var} = $value;
+}
 
-echo -n 'unassigned.value '
-$PGSQL -c "select count(*) from tickets t WHERE ( t.status = 'new' OR t.status = 'open' ) and t.owner = '$NOBODYID';" $PGDB |  awk '{print $1}' | sed '/^$/d'
+require "/etc/request-tracker3.8/RT_SiteConfig.pm";
+
+if ($ARGV[0] =~ /autoconf/) {
+  print "yes\n";
+  exit;
+}
+
+my $NOBODYID = 10;
+
+my $dbh;
+my $sth;
+$dbh = DBI->connect('DBI:Pg:dbname=' . $confs{'db'} . ';host=' . $confs{'host'}, $confs{'user'}, $confs{'password'})
+  or die "Cannot connect to Postgres server: $DBI::errstr\n";
+
+if ($ARGV[0] =~ /config/) {
+  print "graph_title RT open tickets\n";
+  print "graph_vlabel quantity\n";
+  print "graph_category rt\n";
+  print "graph_scale no\n";
+
+  print "assigned.label Assigned\n";
+  print "assigned.draw AREA\n";
+  print "unassigned.label Unassigned\n";
+  print "unassigned.draw STACK\n";
+} else {
+  print "assigned.value ";
+
+  $sth = $dbh->prepare("select count(*) from tickets t WHERE ( t.status = 'new' OR t.status = 'open' ) and t.owner != '$NOBODYID';");
+  $sth->execute;
+
+  if (my @row = $sth->fetchrow) {
+    print "$row[0]\n";
+  }
+
+  $sth->finish;
+
+
+  print "unassigned.value ";
+
+  $sth = $dbh->prepare("select count(*) from tickets t WHERE ( t.status = 'new' OR t.status = 'open' ) and t.owner = '$NOBODYID';");
+  $sth->execute;
+
+  if (my @row = $sth->fetchrow) {
+    print "$row[0]\n";
+  }
+
+  $sth->finish;
+}
+
+$dbh->disconnect();
+
