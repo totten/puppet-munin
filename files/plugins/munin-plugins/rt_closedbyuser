@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# Plugin to monitor the number of opened tickets by user in RT.
+#
+# Usage: copy or link into /etc/munin/node.d/
+#
+# Parameters:
+#
+#       config   (required)
+#       autoconf (optional - used by munin-config)
+#
+# Config variables:
+#
+#       logdir       - Which logfile to use
+#       logfile      - What file to read in logdir
+#
+#
+# Magic markers (optional - used by munin-config and some installation
+# scripts):
+#
+#%# family=contrib
+#%# capabilities=autoconf
+
+PGSQL="/usr/local/bin/psql --tuples-only "
+PGDB="rt3"
+
+
+if [ "$1" = "autoconf" ]; then
+#		print "no (No RT user found. Please consult your RT administrator.)\n";
+# 		exit 1;
+
+	echo yes
+	exit 0
+fi
+
+if [ "$1" = "config" ]; then
+	echo 'graph_title RT closed tickets by user'
+	echo 'graph_vlabel quantity'
+	echo 'graph_category rt'
+
+	USERS=`su pgsql -c "$PGSQL -c \"select u.name from tickets as t, users as u where t.owner = u.id and t.type = 'ticket' and ( t.status != 'open' AND t.status != 'new' ) and u.name != 'Nobody' group by name order by name;\" $PGDB"`
+
+	for u in $USERS; do
+		echo $u.label $u
+	done
+
+	exit 0
+fi
+
+$PGSQL -c "select u.name || '.value', count(t.id) from tickets t, users as u WHERE t.owner = u.id and t.type = 'ticket' and ( t.status != 'open' AND t.status != 'new' ) and u.name != 'Nobody' group by name order by name;" $PGDB |  awk '{print $1 " " $3}'
+

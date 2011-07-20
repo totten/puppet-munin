@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# Plugin to monitor the number of opened tickets in RT.
+#
+# Usage: copy or link into /etc/munin/node.d/
+#
+# Parameters:
+#
+#       config   (required)
+#       autoconf (optional - used by munin-config)
+#
+# Config variables:
+#
+#       logdir       - Which logfile to use
+#       logfile      - What file to read in logdir
+#
+#
+# Magic markers (optional - used by munin-config and some installation
+# scripts):
+#
+#%# family=contrib
+#%# capabilities=autoconf
+
+PGSQL="/usr/local/bin/psql --tuples-only "
+PGDB="rt3"
+NOBODYID=10
+
+if [ "$1" = "autoconf" ]; then
+	echo yes
+	exit 0
+fi
+
+if [ "$1" = "config" ]; then
+	echo 'graph_title RT open tickets'
+	echo 'graph_vlabel quantity'
+	echo 'graph_category rt'
+	echo 'graph_scale no'
+
+	echo 'assigned.label Assigned'
+	echo 'assigned.draw AREA'
+	echo 'unassigned.label Unassigned'
+	echo 'unassigned.draw STACK'
+
+	exit 0
+fi
+
+echo -n 'assigned.value '
+$PGSQL -c "select count(*) from tickets t WHERE ( t.status = 'new' OR t.status = 'open' ) and t.owner != '$NOBODYID';" $PGDB |  awk '{print $1}' | sed '/^$/d'
+
+echo -n 'unassigned.value '
+$PGSQL -c "select count(*) from tickets t WHERE ( t.status = 'new' OR t.status = 'open' ) and t.owner = '$NOBODYID';" $PGDB |  awk '{print $1}' | sed '/^$/d'

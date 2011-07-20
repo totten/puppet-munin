@@ -1,0 +1,94 @@
+#!/usr/bin/perl
+
+# Plugin to monitor the number of opened tickets by queue in RT.
+#
+# Usage: copy or link into /etc/munin/plugins/
+#
+# Parameters:
+#
+#       config   (required)
+#       autoconf (optional - used by munin-config)
+#
+# Config variables:
+#
+#       logdir       - Which logfile to use
+#       logfile      - What file to read in logdir
+#
+#
+# Magic markers (optional - used by munin-config and some installation
+# scripts):
+#
+#%# family=contrib
+#%# capabilities=autoconf
+
+use DBI;
+use strict;
+
+##
+## Fetch configuration variables from the RT 3.8 config files
+##
+
+my %confs = ();
+
+our $DatabaseUser = 'user';
+our $DatabasePassword = 'password';
+our $DatabaseName = 'db';
+our $DatabaseRTHost = 'host';
+
+sub Set {
+  my $var = shift;
+  my $value = shift;
+
+  $confs{$var} = $value;
+}
+
+require "/etc/request-tracker3.8/RT_SiteConfig.pm";
+
+if ($ARGV[0] =~ /autoconf/) {
+  print "yes\n";
+  exit;
+}
+
+my $dbh;
+my $sth;
+$dbh = DBI->connect('DBI:Pg:dbname=' . $confs{'db'} . ';host=' . $confs{'host'}, $confs{'user'}, $confs{'password'})
+  or die "Cannot connect to Postgres server: $DBI::errstr\n";
+
+if ($ARGV[0] =~ /config/) {
+  print "graph_title RT open tickets by queue\n";
+  print "graph_vlabel quantity\n";
+  print "graph_category rt\n";
+  print "graph_scale no\n";
+
+  $sth = $dbh->prepare("SELECT q.name
+                 FROM tickets as t, queues as q
+                 WHERE t.queue = q.id
+                   AND t.type = 'ticket'
+                   AND (t.status = 'open' OR t.status = 'new')
+                 GROUP by name order by q.name");
+
+  $sth->execute;
+
+  while (my @row = $sth->fetchrow) {
+    print "$row[0]" . ".label " . $row[0] . "\n";
+  }
+
+  $sth->finish;
+} else {
+  $sth = $dbh->prepare("SELECT q.name || '.value', count(t.id)
+                 FROM tickets t, queues as q
+                 WHERE t.queue = q.id and t.type = 'ticket'
+                   AND (t.status = 'open' OR t.status = 'new')
+                 GROUP BY name order by q.name");
+
+  $sth->execute;
+
+  while (my @row = $sth->fetchrow) {
+    print "$row[0] $row[1]\n";
+  }
+
+  $sth->finish;
+}
+
+$dbh->disconnect();
+

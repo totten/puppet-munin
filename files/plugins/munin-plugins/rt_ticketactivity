@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+# Plugin to monitor the number of opened tickets in RT.
+#
+# Usage: copy or link into /etc/munin/node.d/
+#
+# Parameters:
+#
+#       config   (required)
+#       autoconf (optional - used by munin-config)
+#
+# Magic markers (optional - used by munin-config and some installation
+# scripts):
+#
+#%# family=contrib
+
+PGSQL="/usr/local/bin/psql --tuples-only "
+PGDB="rt3"
+NOBODYID=10
+
+if [ "$1" = "autoconf" ]; then
+	echo yes
+	exit 0
+fi
+
+if [ "$1" = "config" ]; then
+	echo 'graph_title RT ticket activity'
+	echo 'graph_vlabel quantity'
+	echo 'graph_category rt'
+
+	echo 'reply.label Reply'
+	echo 'reply.draw AREA'
+	echo 'reply.type COUNTER'
+	echo 'comment.label Comment'
+	echo 'comment.draw STACK'
+	echo 'comment.type COUNTER'
+
+	exit 0
+fi
+
+echo -n 'reply.value '
+$PGSQL -c "select count(*) from transactions t WHERE ( t.type = 'Correspond' ) ;" $PGDB |  awk '{print $1}' | sed '/^$/d'
+
+echo -n 'comment.value '
+$PGSQL -c "select count(*) from transactions t WHERE ( t.type = 'Comment' );" $PGDB |  awk '{print $1}' | sed '/^$/d'
+

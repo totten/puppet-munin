@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# Plugin to monitor the average response time in RT.
+#
+# Usage: copy or link into /etc/munin/node.d/
+#
+# Parameters:
+#
+#       config   (required)
+#       autoconf (optional - used by munin-config)
+#
+# Config variables:
+#
+#       logdir       - Which logfile to use
+#       logfile      - What file to read in logdir
+#
+#
+# Magic markers (optional - used by munin-config and some installation
+# scripts):
+#
+#%# family=contrib
+#%# capabilities=autoconf
+
+PGSQL="/usr/local/bin/psql --tuples-only "
+PGDB="rt3"
+
+
+if [ "$1" = "autoconf" ]; then
+	echo yes
+	exit 0
+fi
+
+if [ "$1" = "config" ]; then
+	echo 'graph_title RT average response time'
+	echo 'graph_vlabel days'
+	echo 'graph_category rt'
+	echo 'graph_scale no'
+
+	# exclude 'rt approvals' and 'test' (respectively 2 and 7)
+	$PGSQL -c "select name || '.label', name from queues where id not in (2, 7) order by id;" $PGDB | awk '{print $1, $3}'
+
+	exit 0
+fi
+
+# [ML] some tickets strangely have a 1970 "resolved" date..  so check if resolved - created > 0
+
+$PGSQL -c "select q.name || '.value', extract(day from avg(CASE WHEN t.resolved - t.created > 0 THEN t.resolved - t.created ELSE NOW()-NOW() END)) \
+		FROM tickets as t, queues as q \
+		WHERE t.queue = q.id AND NOW() - INTERVAL '30 DAY' <= t.started and t.status = 'resolved' \
+		GROUP by q.name;" $PGDB | awk '{print $1, $3}'
+
