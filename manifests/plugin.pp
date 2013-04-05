@@ -82,7 +82,7 @@ class munin::plugins::base {
 			mode => 0644, owner => root, group => root,
 			notify => Service[munin-node],
 			before => Package[munin-node];
-		"/var/lib/munin/plugin-state":
+		"/var/lib/munin-node/plugin-state":
 			ensure => directory,
 			mode => 0755, owner => munin, group => munin;
 	}
